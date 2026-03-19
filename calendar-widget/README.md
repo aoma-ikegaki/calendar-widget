@@ -121,7 +121,7 @@ pythonw C:\path\to\calendar_widget.py
 ## ファイル構成
 
 ```
-calendar_widget/
+calendar-widget/
 ├── calendar_widget.py      # メインアプリケーション
 ├── requirements.txt        # 依存ライブラリ
 ├── README.md               # このファイル

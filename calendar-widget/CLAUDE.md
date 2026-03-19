@@ -27,7 +27,7 @@ google-api-python-client
 ## ファイル構成
 
 ```
-calendar_widget/
+calendar-widget/
 ├── calendar_widget.py          # メインアプリケーション
 ├── requirements.txt            # 依存ライブラリ
 ├── README.md                   # セットアップガイド
