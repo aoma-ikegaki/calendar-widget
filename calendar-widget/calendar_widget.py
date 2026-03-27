@@ -414,8 +414,13 @@ class CalendarWidget(QWidget):
                 creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
-                    creds.refresh(Request())
-                else:
+                    try:
+                        creds.refresh(Request())
+                    except Exception:
+                        # リフレッシュトークン失効 → 削除して再認証
+                        token_path.unlink(missing_ok=True)
+                        creds = None
+                if not creds:
                     flow  = InstalledAppFlow.from_client_secrets_file(str(creds_path), SCOPES)
                     creds = flow.run_local_server(port=0)
                 with open(token_path, 'w') as f:
@@ -436,29 +441,40 @@ class CalendarWidget(QWidget):
                 timeMax=(now + timedelta(days=14)).isoformat(),
                 maxResults=50, singleEvents=True, orderBy='startTime',
             ).execute()
-            return [self._parse(item) for item in res.get('items', [])]
+            result = []
+            for item in res.get('items', []):
+                result.extend(self._parse(item))
+            return result
         except Exception as e:
             print(f'取得エラー: {e}')
             return self._demo()
 
-    def _parse(self, item: Dict) -> Dict[str, Any]:
+    def _parse(self, item: Dict) -> List[Dict[str, Any]]:
         title = item.get('summary', '（タイトルなし）')
         start = item.get('start', {})
         end   = item.get('end', {})
         is_allday = 'date' in start and 'dateTime' not in start
         if is_allday:
-            return {'title': title, 'date_key': start.get('date', ''),
-                    'time_str': '', 'is_allday': True,
-                    'html_link': item.get('htmlLink', '')}
+            start_date = datetime.strptime(start.get('date', ''), '%Y-%m-%d').date()
+            end_date   = datetime.strptime(end.get('date', ''), '%Y-%m-%d').date()
+            # end.date は終了日の翌日なので1日戻す
+            days = (end_date - start_date).days
+            return [
+                {'title': title,
+                 'date_key': (start_date + timedelta(days=i)).strftime('%Y-%m-%d'),
+                 'time_str': '', 'is_allday': True,
+                 'html_link': item.get('htmlLink', '')}
+                for i in range(max(days, 1))
+            ]
         try:
             s = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
             e = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00')).astimezone().replace(tzinfo=None)
-            return {'title': title, 'date_key': s.strftime('%Y-%m-%d'),
-                    'time_str': f'{s.strftime("%H:%M")} – {e.strftime("%H:%M")}',
-                    'is_allday': False, 'html_link': item.get('htmlLink', '')}
+            return [{'title': title, 'date_key': s.strftime('%Y-%m-%d'),
+                     'time_str': f'{s.strftime("%H:%M")} – {e.strftime("%H:%M")}',
+                     'is_allday': False, 'html_link': item.get('htmlLink', '')}]
         except Exception:
-            return {'title': title, 'date_key': start.get('dateTime', '')[:10],
-                    'time_str': '', 'is_allday': False, 'html_link': ''}
+            return [{'title': title, 'date_key': start.get('dateTime', '')[:10],
+                     'time_str': '', 'is_allday': False, 'html_link': ''}]
 
     def _demo(self) -> List[Dict[str, Any]]:
         today = datetime.now()
